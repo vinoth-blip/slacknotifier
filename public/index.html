@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bitbucket Activity</title>
+<style>
+  :root {
+    --bg: #0b1020; --panel: #121a31; --panel2: #18223f; --line: rgba(255,255,255,.08);
+    --text: #f2f4f8; --muted: #9aa6bf; --accent: #4c9aff; --ok: #36b37e; --bad: #ff5630; --warn: #ffab00;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f4f6fb; --panel: #ffffff; --panel2: #eef1f8; --line: rgba(10,20,50,.1); --text: #101828; --muted: #5b6784; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 28px 16px 60px; }
+  header { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+  h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
+  h1 small { display: block; font-size: 13px; color: var(--muted); font-weight: 500; letter-spacing: 0; margin-top: 2px; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .pill.ok .dot { background: var(--ok); box-shadow: 0 0 0 4px rgba(54,179,126,.2); }
+  .pill.bad .dot { background: var(--bad); box-shadow: 0 0 0 4px rgba(255,86,48,.2); }
+  .alert { display: none; margin-bottom: 18px; padding: 14px 16px; border-radius: 14px; background: rgba(255,86,48,.12); border: 1px solid rgba(255,86,48,.4); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; }
+  .stat b { display: block; font-size: 26px; letter-spacing: -.02em; }
+  .stat span { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .chip { cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--muted); padding: 6px 13px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 600; }
+  .chip.on { background: var(--accent); color: #fff; border-color: transparent; }
+  .card { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px 14px 22px; margin-bottom: 12px; overflow: hidden; }
+  .card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--c); }
+  .label { font-size: 12px; font-weight: 800; letter-spacing: .14em; color: var(--c); }
+  .title { font-size: 18px; font-weight: 700; margin: 4px 0 8px; overflow-wrap: anywhere; letter-spacing: -.01em; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; }
+  .meta span { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 3px 10px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  a.btn { white-space: nowrap; text-decoration: none; background: var(--c); color: #fff; padding: 6px 14px; border-radius: 10px; font-weight: 700; font-size: 13px; }
+  .empty, .gate { text-align: center; padding: 50px 20px; color: var(--muted); }
+  .gate input { font: inherit; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--text); width: min(360px, 100%); }
+  .gate button { font: inherit; font-weight: 700; margin-left: 6px; padding: 11px 18px; border-radius: 12px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+  @media (max-width: 520px) { .gate button { margin: 10px 0 0; width: 100%; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Bitbucket Activity<small id="sub">Live feed of everything sent to Slack</small></h1>
+    <div class="pill" id="health"><span class="dot"></span><span id="healthText">Checking…</span></div>
+  </header>
+
+  <div class="alert" id="alert"></div>
+  <div id="gate" class="gate" style="display:none">
+    <p><b>Enter your key to open the dashboard</b><br>It's the same <code>POLL_KEY</code> you set in Vercel.</p>
+    <input id="key" type="password" placeholder="POLL_KEY" autocomplete="off">
+    <button id="go">Open</button>
+    <p id="gateErr" style="color:var(--bad)"></p>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="stats">
+      <div class="stat"><b id="sToday">0</b><span>Events today</span></div>
+      <div class="stat"><b id="sMerged">0</b><span>PRs merged</span></div>
+      <div class="stat"><b id="sOpened">0</b><span>PRs opened</span></div>
+      <div class="stat"><b id="sProd">0</b><span>Production updates</span></div>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KEY = '';
+  try { KEY = localStorage.getItem('bbkey') || ''; } catch (e) {}
+  var all = [], filter = 'All';
+  var $ = function (id) { return document.getElementById(id); };
+
+  function ago(ms) {
+    var s = Math.max(1, Math.round((Date.now() - ms) / 1000));
+    if (s < 60) return s + 's ago';
+    if (s < 3600) return Math.round(s / 60) + ' min ago';
+    if (s < 86400) return Math.round(s / 3600) + ' h ago';
+    return Math.round(s / 86400) + ' d ago';
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function clean(label) { return String(label).replace(/^[^A-Za-z]+/, '').trim(); }
+
+  async function api(path) {
+    var r = await fetch(path + (path.indexOf('?') > -1 ? '&' : '?') + 'key=' + encodeURIComponent(KEY));
+    if (r.status === 401) throw new Error('401');
+    return r.json();
+  }
+
+  function render() {
+    var labels = ['All'];
+    all.forEach(function (e) { var l = clean(e.label); if (labels.indexOf(l) < 0) labels.push(l); });
+    $('chips').innerHTML = labels.map(function (l) {
+      return '<button class="chip' + (l === filter ? ' on' : '') + '" data-l="' + esc(l) + '">' + esc(l) + '</button>';
+    }).join('');
+    Array.prototype.forEach.call($('chips').children, function (b) {
+      b.onclick = function () { filter = b.getAttribute('data-l'); render(); };
+    });
+    var rows = all.filter(function (e) { return filter === 'All' || clean(e.label) === filter; });
+    $('list').innerHTML = rows.length ? rows.map(function (e) {
+      var title = e.lines[0] || '';
+      var meta = e.lines.slice(1).filter(Boolean).map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('');
+      return '<div class="card" style="--c:' + esc(e.color) + '">' +
+        '<div class="label">' + esc(clean(e.label).toUpperCase()) + '</div>' +
+        '<div class="title">' + esc(title) + '</div>' +
+        '<div class="meta">' + meta + '</div>' +
+        '<div class="foot"><span title="' + esc(new Date(e.t).toLocaleString()) + '">' + ago(e.t) + ' · ' + esc(new Date(e.t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) + '</span>' +
+        (e.url ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(e.url) + '">Open in Bitbucket ↗</a>' : '') + '</div></div>';
+    }).join('') : '<div class="empty">Nothing here yet. New activity will show up within a minute or two.</div>';
+
+    var day = Date.now() - 86400000;
+    var n = function (word) { return all.filter(function (e) { return e.t > day && clean(e.label).toLowerCase().indexOf(word) > -1; }).length; };
+    $('sToday').textContent = all.filter(function (e) { return e.t > day; }).length;
+    $('sMerged').textContent = n('merged'); $('sOpened').textContent = n('opened'); $('sProd').textContent = n('production');
+  }
+
+  async function load() {
+    try {
+      var st = await api('/api/status');
+      var h = $('health'), a = $('alert');
+      var last = st.lastPoll && st.lastPoll.at ? Date.parse(st.lastPoll.at) : 0;
+      var mins = last ? Math.round((Date.now() - last) / 60000) : null;
+      if (mins !== null && mins <= 5 && st.lastPoll.ok) { h.className = 'pill ok'; $('healthText').textContent = 'Live · checked ' + (mins < 1 ? 'just now' : mins + ' min ago'); a.style.display = 'none'; }
+      else {
+        h.className = 'pill bad';
+        $('healthText').textContent = mins === null ? 'No poll yet' : 'Stopped · last check ' + mins + ' min ago';
+        a.style.display = 'block';
+        a.textContent = 'Polling looks stopped. Check that the cron-job.org job is enabled and its URL key matches POLL_KEY.' +
+          (st.lastPoll && st.lastPoll.problems && st.lastPoll.problems.length ? ' Problem: ' + st.lastPoll.problems[0] : '');
+      }
+      var ev = await api('/api/events');
+      all = ev.events || [];
+      $('gate').style.display = 'none'; $('app').style.display = 'block';
+      render();
+    } catch (e) {
+      if (String(e.message) === '401') {
+        try { localStorage.removeItem('bbkey'); } catch (x) {}
+        $('app').style.display = 'none'; $('gate').style.display = 'block';
+        if (KEY) $('gateErr').textContent = 'That key was not accepted. Try again.';
+        KEY = '';
+      } else { $('healthText').textContent = 'Could not load'; }
+    }
+  }
+
+  $('go').onclick = function () {
+    KEY = $('key').value.trim();
+    try { localStorage.setItem('bbkey', KEY); } catch (e) {}
+    $('gateErr').textContent = '';
+    load();
+  };
+  $('key').onkeydown = function (e) { if (e.key === 'Enter') $('go').onclick(); };
+
+  if (KEY) load(); else $('gate').style.display = 'block';
+  setInterval(function () { if (KEY) load(); }, 30000);
+})();
+</script>
+</body>
+</html>
